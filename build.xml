@@ -8,7 +8,7 @@
 	         classname="com.bas.export.GenerateDDL"
 	         classpath="ddl.jar;lib/ojdbc14.jar;lib/orai18n.jar;lib/ojdbc14dms.jar" />
 	<target name="downDB">
-		<ddlGen projectcode="test"
+		<ddlGen projectcode="sk001"
 		        jdbcurl="jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=192.168.4.52)(PORT=1522))(CONNECT_DATA=(SERVICE_NAME=DEV)))"
 		        dbuser="apps"
 		        dbpassword="apps"
@@ -17,7 +17,7 @@
 	</target>
 
 	<target name="db.diff">
-		<ddlGen projectcode="test"
+		<ddlGen projectcode="sk001"
 		        jdbcurl="jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=192.168.4.52)(PORT=1522))(CONNECT_DATA=(SERVICE_NAME=DEV)))"
 		        dbuser="apps"
 		        dbpassword="apps"

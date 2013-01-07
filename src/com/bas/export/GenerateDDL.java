@@ -2,9 +2,10 @@ package com.bas.export;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileWriter;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.sql.CallableStatement;
 import java.sql.Clob;
@@ -38,7 +39,7 @@ public class GenerateDDL extends Task {
 			"PROCEDURE", "FUNCTION", "TRIGGER", "PACKAGE" };
 	private final String lineSep = System.getProperty("line.separator");
 	private static final Map<String, String> sqlList = new HashMap<String, String>();
-	private String ddlFileEncoding = "UTF-8";
+	private String ddlFileEncoding = "Cp1251";
 	private String projectCode;
 	private String dbLink;
 	private String outDir;
@@ -47,16 +48,6 @@ public class GenerateDDL extends Task {
 	private String dbUser;
 	private String dbPassword;
 	private String action;
-
-	public static void main(String[] args) throws IOException, SQLException,
-			ClassNotFoundException {
-		GenerateDDL gddl = new GenerateDDL();
-		gddl.setJdbcURL("jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=192.168.4.52)(PORT=1522))(CONNECT_DATA=(SERVICE_NAME=DEV)))");
-		gddl.setDbUser("apps");
-		gddl.setDbPassword("apps");
-		System.out.println(gddl.getSynonyms(gddl.getConn(),
-				"XXSK_CUSTOMER_FOUNDERS_SEQ", "XXSK"));
-	}
 
 	@Override
 	public void execute() throws BuildException {
@@ -88,38 +79,39 @@ public class GenerateDDL extends Task {
 
 	private void genDbDiff() throws IOException, SQLException,
 			ClassNotFoundException {
-		String defaultScheme = getProject().getProperty(
-				projectCode + ".default.scheme");
+		String defaultschema = getProject().getProperty(
+				projectCode + ".default.schema");
 		File out = new File(outDir);
 		if (!out.isDirectory())
 			out.mkdir();
 		Set<String> projectCodes = getDependantProjectCodes();
 		for (String proj : projectCodes) {
-			out = new File(outDir + File.separator + projectCode);
+			out = new File(outDir + File.separator + proj);
 			if (!out.isDirectory())
 				out.mkdir();
 
-			String scheme = getProject().getProperty(proj + ".table.scheme");
-			if (scheme == null)
-				scheme = defaultScheme;
-			if (scheme == null)
+			String schema = getProject().getProperty(proj + ".table.schema");
+			if (schema == null)
+				schema = defaultschema;
+			if (schema == null)
 				return;
 			String nList = getProject().getProperty(proj + ".table.name");
 			if (nList == null)
 				return;
 			nList = nList.toUpperCase();
-			scheme = scheme.toUpperCase();
+			schema = schema.toUpperCase();
 			Set<String> names = new HashSet<String>(Arrays.asList(nList
 					.split(",")));
 			try {
 				for (String name : names) {
-					File f = new File(out.getPath() + File.separator + scheme
+					File f = new File(out.getPath() + File.separator + schema
 							+ "." + name + ".alter.sql");
-					Writer sw = new FileWriter(f);
+					Writer sw = new OutputStreamWriter(new FileOutputStream(f),
+							ddlFileEncoding);
 					boolean hasAlter = false;
 					try {
-						hasAlter = genDiffDdl(getConn(), sw, "TABLE",
-								name, scheme);
+						hasAlter = genDiffDdl(getConn(), sw, "TABLE", name,
+								schema);
 					} finally {
 						sw.close();
 					}
@@ -135,8 +127,8 @@ public class GenerateDDL extends Task {
 
 	private void genProjectDdl() throws SQLException, IOException,
 			ClassNotFoundException {
-		String defaultScheme = getProject().getProperty(
-				projectCode + ".default.scheme");
+		String defaultschema = getProject().getProperty(
+				projectCode + ".default.schema");
 		Set<String> projectCodes = getDependantProjectCodes();
 		File out = new File(outDir);
 		if (!out.isDirectory())
@@ -145,28 +137,30 @@ public class GenerateDDL extends Task {
 		try {
 			for (String proj : projectCodes) {
 				for (String obj : dbObjects) {
-					String scheme = getProject().getProperty(
-							proj + "." + obj.toLowerCase() + ".scheme");
-					if (scheme == null)
-						scheme = defaultScheme;
-					if (scheme == null)
+					String schema = getProject().getProperty(
+							proj + "." + obj.toLowerCase() + ".schema");
+					if (schema == null)
+						schema = defaultschema;
+					if (schema == null)
 						continue;
 					String nList = getProject().getProperty(
 							proj + "." + obj.toLowerCase() + ".name");
 					if (nList == null)
 						continue;
 					nList = nList.toUpperCase();
-					scheme = scheme.toUpperCase();
-					Set<String> names = new HashSet<String>(
-							Arrays.asList(nList.split(",")));
+					schema = schema.toUpperCase();
+					Set<String> names = new HashSet<String>(Arrays.asList(nList
+							.split(",")));
 					for (String name : names) {
-						Writer sw = new FileWriter(out.getPath()
-								+ File.separator + scheme + "." + name + ".sql");
+						File f = new File(out.getPath() + File.separator
+								+ schema + "." + name + ".sql");
+						Writer sw = new OutputStreamWriter(
+								new FileOutputStream(f), ddlFileEncoding);
 						try {
-							genObjectDdl(getConn(), sw, obj, name, scheme);
+							genObjectDdl(getConn(), sw, obj, name, schema);
 							if (!"SYNONYM".equals(obj)) {
 								Map<String, String> synonyms = getSynonyms(
-										getConn(), name, scheme);
+										getConn(), name, schema);
 								for (Map.Entry<String, String> entry : synonyms
 										.entrySet()) {
 									genObjectDdl(getConn(), sw, "SYNONYM",
@@ -186,13 +180,11 @@ public class GenerateDDL extends Task {
 	}
 
 	private void genObjectDdl(Connection dbConnection, Writer w,
-			String objectType, String objectName, String scheme)
+			String objectType, String objectName, String schema)
 			throws SQLException, IOException {
 		if ("PACKAGE".equals(objectType)) {
-			genObjectDdl(dbConnection, w, "PACKAGE_SPEC", objectName,
-					scheme);
-			genObjectDdl(dbConnection, w, "PACKAGE_BODY", objectName,
-					scheme);
+			genObjectDdl(dbConnection, w, "PACKAGE_SPEC", objectName, schema);
+			genObjectDdl(dbConnection, w, "PACKAGE_BODY", objectName, schema);
 			return;
 		}
 		CallableStatement call = dbConnection.prepareCall(ddlSql);
@@ -200,7 +192,7 @@ public class GenerateDDL extends Task {
 			call.registerOutParameter(1, Types.CLOB);
 			call.setString(2, objectType);
 			call.setString(3, objectName);
-			call.setString(4, scheme);
+			call.setString(4, schema);
 			call.execute();
 			Clob res = call.getClob(1);
 			String buff = null;
@@ -224,7 +216,7 @@ public class GenerateDDL extends Task {
 	}
 
 	private boolean genDiffDdl(Connection dbConnection, Writer w,
-			String objectType, String objectName, String scheme)
+			String objectType, String objectName, String schema)
 			throws SQLException, IOException {
 		boolean hasAlter = false;
 		CallableStatement call = dbConnection.prepareCall(aleterDdlSql);
@@ -233,8 +225,8 @@ public class GenerateDDL extends Task {
 			call.setString(2, objectType);
 			call.setString(3, objectName);
 			call.setString(4, objectName);
-			call.setString(5, scheme);
-			call.setString(6, scheme);
+			call.setString(5, schema);
+			call.setString(6, schema);
 			call.setString(7, dbLink);
 			call.execute();
 			Clob res = call.getClob(1);
@@ -255,11 +247,11 @@ public class GenerateDDL extends Task {
 	}
 
 	private Map<String, String> getSynonyms(Connection dbConnection,
-			String objectName, String scheme) throws SQLException {
+			String objectName, String schema) throws SQLException {
 		Map<String, String> res = new HashMap<String, String>();
 		PreparedStatement ps = dbConnection.prepareStatement(synonymsSql);
 		try {
-			ps.setString(1, scheme);
+			ps.setString(1, schema);
 			ps.setString(2, objectName);
 			ResultSet rs = ps.executeQuery();
 			while (rs.next()) {
