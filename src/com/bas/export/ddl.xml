@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sql>
+	<get_synonym>
+		<![CDATA[
+Select Owner, Synonym_Name
+  From Dba_Synonyms
+ Where Table_Owner = ?
+   And Table_Name = ?]]>
+	</get_synonym>
+	<get_ddl>
+		<![CDATA[
+	Begin
+	  Dbms_Metadata.Set_Transform_Param(Dbms_Metadata.Session_Transform
+	                                   ,'STORAGE'
+	                                   ,False);
+	  Dbms_Metadata.Set_Transform_Param(Dbms_Metadata.Session_Transform
+	                                   ,'PRETTY'
+	                                   ,False);
+	  :1 := Dbms_Metadata.Get_Ddl(Object_Type => :2, Name => :3, Schema => :4);
+	  Dbms_Metadata.Set_Transform_Param(Dbms_Metadata.Session_Transform
+	                                   ,'DEFAULT');
+	End;]]>
+	</get_ddl>
+	<alter_ddl>
+	<![CDATA[
+	Begin
+	  :1 := Dbms_Metadata_Diff.Compare_Alter(Object_Type   => :2
+                                       ,Name1         => :3
+                                       ,Name2         => :4
+                                       ,Schema1       => :5
+                                       ,Schema2       => :6
+                                       ,Network_Link1 => :7
+                                       ,Network_Link2 => Null);
+	End;]]>
+	</alter_ddl>
+</sql>

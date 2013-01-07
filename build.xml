@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="DBObjectExporter" default="build">
+	<property name="src" value="src" />
+	<property name="lib" value="lib" />
+	<property name="bin" value="bin" />
+	<property file="dbobjects.properties" />
+	<taskdef name="ddlGen"
+	         classname="com.bas.export.GenerateDDL"
+	         classpath="ddl.jar;lib/ojdbc14.jar;lib/orai18n.jar;lib/ojdbc14dms.jar" />
+	<target name="downDB">
+		<ddlGen projectcode="test"
+		        jdbcurl="jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=192.168.4.52)(PORT=1522))(CONNECT_DATA=(SERVICE_NAME=DEV)))"
+		        dbuser="apps"
+		        dbpassword="apps"
+		        outdir="dbobjects"
+		        action="downDB" />
+	</target>
+
+	<target name="db.diff">
+		<ddlGen projectcode="test"
+		        jdbcurl="jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=192.168.4.52)(PORT=1522))(CONNECT_DATA=(SERVICE_NAME=DEV)))"
+		        dbuser="apps"
+		        dbpassword="apps"
+		        outdir="dbobjects"
+		        action="db.diff"
+		        dblink="TEST.SAMRUK.KZ" />
+	</target>
+	<target name="build">
+		<javac classpath="${lib}"
+		       srcdir="${src}"
+		       destdir="${bin}"
+		       includes="com/bas/export/GenerateDDL*" />
+		<copy file="${src}/com/bas/export/ddl.xml" todir="${bin}" />
+		<jar destfile="ddl.jar"
+		     basedir="${bin}"
+		     includes="com/bas/export/GenerateDDL*,com/bas/export/ddl.xml" />
+	</target>
+	<target name="build2">
+		<javac classpath="${lib}"
+		       srcdir="${src}"
+		       destdir="${bin}"
+		       includes="com/bas/export/ExportDependencySource*,com/bas/export/DDLExportTask*" />
+		<copy file="export.properties" todir="${bin}" />
+		<jar destfile="ddl.jar"
+		     basedir="${bin}"
+		     includes="com/bas/export/ExportDependencySource*,com/bas/export/DDLExportTask*">
+			<manifest>
+				<attribute name="Main-Class"
+				           value="com.bas.export.ExportDependencySource" />
+				<!--attribute name="Class-Path" value="./lib/orai18n.jar ./lib/ojdbc14dms.jar ./lib/ojdbc14.jar ./lib/ocrs12.jar ./lib/nls_charset12.jar ./lib/nls_charset11.jar"/>
+				<attribute name="Class-Path" value="./lib/ocrs12.jar ./lib/ojdbc14dms.jar ./lib/ojdbc14.jar ./lib/orai18n.jar"/-->
+			</manifest>
+		</jar>
+		<!--copy todir="d:/Projects/TSEK/lib" file="ddl.jar" overwrite="true"/-->
+	</target>
+</project>
