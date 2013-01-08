@@ -152,8 +152,17 @@ public class GenerateDDL extends Task {
 					Set<String> names = new HashSet<String>(Arrays.asList(nList
 							.split(",")));
 					for (String name : names) {
+						String ext = ".sql";
+						if ("PACKAGE".equalsIgnoreCase(obj))
+							ext = ".pck";
+						else if ("TRIGGER".equalsIgnoreCase(obj))
+							ext = ".trg";
+						else if ("FUNCTION".equalsIgnoreCase(obj))
+							ext = ".fnc";
+						else if ("PROCEDURE".equalsIgnoreCase(obj))
+							ext = ".prc";
 						File f = new File(out.getPath() + File.separator
-								+ schema + "." + name + ".sql");
+								+ schema + "." + name + ext);
 						Writer sw = new OutputStreamWriter(
 								new FileOutputStream(f), ddlFileEncoding);
 						try {
