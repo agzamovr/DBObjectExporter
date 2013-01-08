@@ -161,8 +161,8 @@ public class GenerateDDL extends Task {
 							ext = ".fnc";
 						else if ("PROCEDURE".equalsIgnoreCase(obj))
 							ext = ".prc";
-						File f = new File(out.getPath() + File.separator
-								+ schema + "." + name + ext);
+						File f = new File(out.getPath() + File.separator + name
+								+ ext);
 						Writer sw = new OutputStreamWriter(
 								new FileOutputStream(f), ddlFileEncoding);
 						try {
