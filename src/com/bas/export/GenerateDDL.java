@@ -104,8 +104,8 @@ public class GenerateDDL extends Task {
 					.split(",")));
 			try {
 				for (String name : names) {
-					File f = new File(out.getPath() + File.separator + schema
-							+ "." + name + ".alter.sql");
+					File f = new File(out.getPath() + File.separator + name
+							+ ".alter.sql");
 					Writer sw = new OutputStreamWriter(new FileOutputStream(f),
 							ddlFileEncoding);
 					boolean hasAlter = false;
