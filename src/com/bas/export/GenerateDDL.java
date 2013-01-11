@@ -79,7 +79,7 @@ public class GenerateDDL extends Task {
 
 	private void genDbDiff() throws IOException, SQLException,
 			ClassNotFoundException {
-		String defaultschema = getProject().getProperty(
+		String rootDefaultschema = getProject().getProperty(
 				projectCode + ".default.schema");
 		File out = new File(outDir);
 		if (!out.isDirectory())
@@ -89,6 +89,10 @@ public class GenerateDDL extends Task {
 			out = new File(outDir + File.separator + proj);
 			if (!out.isDirectory())
 				out.mkdir();
+			String defaultschema = getProject().getProperty(
+					proj + ".default.schema");
+			if (defaultschema == null || defaultschema.isEmpty())
+				defaultschema = rootDefaultschema;
 
 			String schema = getProject().getProperty(proj + ".table.schema");
 			if (schema == null)
@@ -127,7 +131,7 @@ public class GenerateDDL extends Task {
 
 	private void genProjectDdl() throws SQLException, IOException,
 			ClassNotFoundException {
-		String defaultschema = getProject().getProperty(
+		String rootDefaultschema = getProject().getProperty(
 				projectCode + ".default.schema");
 		Set<String> projectCodes = getDependantProjectCodes();
 		File out = new File(outDir);
@@ -137,6 +141,10 @@ public class GenerateDDL extends Task {
 		try {
 			for (String proj : projectCodes) {
 				for (String obj : dbObjects) {
+					String defaultschema = getProject().getProperty(
+							proj + ".default.schema");
+					if (defaultschema == null || defaultschema.isEmpty())
+						defaultschema = rootDefaultschema;
 					String schema = getProject().getProperty(
 							proj + "." + obj.toLowerCase() + ".schema");
 					if (schema == null)
@@ -179,6 +187,7 @@ public class GenerateDDL extends Task {
 						} finally {
 							sw.close();
 						}
+						System.out.println(name + " " + obj + " ddl generated");
 					}
 				}
 			}
