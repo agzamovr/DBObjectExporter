@@ -46,8 +46,9 @@ public class GenerateDDL extends Task {
 	private final BlockingQueue<DBObj> tasks = new LinkedBlockingQueue<DBObj>();;
 	private final String ddlSql;
 	private final String synonymsSql;
+	private final String indexesSql;
 	private final String aleterDdlSql;
-	private final String[] dbObjects = { "SEQUENCE", "TABLE", "INDEX", "VIEW",
+	private final String[] dbObjects = { "SEQUENCE", "TABLE", "VIEW",
 			"MATERIALIZED_VIEW", "PROCEDURE", "FUNCTION", "TRIGGER", "PACKAGE" };
 	private final String lineSep = System.getProperty("line.separator");
 	private static final Map<String, String> sqlList = new HashMap<String, String>();
@@ -77,14 +78,13 @@ public class GenerateDDL extends Task {
 	}
 
 	private class Exec implements Callable<DBObj> {
-		private final Connection conn;
+		private Connection conn;
 
-		public Exec() throws ClassNotFoundException, SQLException {
+		private Connection getConn() throws SQLException {
+			if (conn != null && !conn.isClosed())
+				return conn;
 			conn = DriverManager.getConnection(jdbcURL, dbUser, dbPassword);
 			conn.setAutoCommit(false);
-		}
-
-		public Connection getConn() {
 			return conn;
 		}
 
@@ -115,6 +115,14 @@ public class GenerateDDL extends Task {
 
 				genObjectDdl(getConn(), sw, dbObject.type, dbObject.name,
 						dbObject.schema);
+				if ("TABLE".equals(dbObject.type)) {
+					Map<String, String> indexes = getTableIndexes(getConn(),
+							dbObject.name, dbObject.schema);
+					for (Map.Entry<String, String> entry : indexes.entrySet()) {
+						genObjectDdl(getConn(), sw, "INDEX", entry.getKey(),
+								entry.getValue());
+					}
+				}
 				if (!"SYNONYM".equals(dbObject.type)) {
 					Map<String, String> synonyms = getSynonyms(getConn(),
 							dbObject.name, dbObject.schema);
@@ -129,10 +137,10 @@ public class GenerateDDL extends Task {
 			} finally {
 				try {
 					sw.close();
-					getConn().close();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
+				getConn().close();
 			}
 			return dbObject;
 		}
@@ -156,6 +164,7 @@ public class GenerateDDL extends Task {
 		ddlSql = getSql("get_ddl");
 		aleterDdlSql = getSql("alter_ddl");
 		synonymsSql = getSql("get_synonym");
+		indexesSql = getSql("get_table_index");
 	}
 
 	private Set<String> getDependantProjectCodes() {
@@ -353,6 +362,24 @@ public class GenerateDDL extends Task {
 		return res;
 	}
 
+	private Map<String, String> getTableIndexes(Connection dbConnection,
+			String objectName, String schema) throws SQLException {
+		Map<String, String> res = new HashMap<String, String>();
+		PreparedStatement ps = dbConnection.prepareStatement(indexesSql);
+		try {
+			ps.setString(1, schema);
+			ps.setString(2, objectName);
+			ResultSet rs = ps.executeQuery();
+			while (rs.next()) {
+				res.put(rs.getString(2), rs.getString(1));
+			}
+			rs.close();
+		} finally {
+			ps.close();
+		}
+		return res;
+	}
+
 	private String getSql(String sqlName) {
 		if (sqlList.containsKey(sqlName))
 			return sqlList.get(sqlName);
@@ -454,6 +481,7 @@ public class GenerateDDL extends Task {
 		if (conn != null && !conn.isClosed())
 			return conn;
 		conn = DriverManager.getConnection(jdbcURL, dbUser, dbPassword);
+		conn.setAutoCommit(false);
 		return conn;
 	}
 

@@ -7,6 +7,15 @@ Select Owner, Synonym_Name
  Where Table_Owner = ?
    And Table_Name = ?]]>
 	</get_synonym>
+	<get_table_index>
+		<![CDATA[
+Select Owner, Index_Name
+  From Dba_Indexes Di
+ Where Index_Type = 'NORMAL'
+   And Uniqueness = 'NONUNIQUE'
+   And Table_Owner = ?
+   And Table_Name = ?]]>
+	</get_table_index>
 	<get_ddl>
 		<![CDATA[
 	Begin
