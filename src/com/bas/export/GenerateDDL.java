@@ -36,7 +36,7 @@ public class GenerateDDL extends Task {
 	private final String synonymsSql;
 	private final String aleterDdlSql;
 	private final String[] dbObjects = { "SEQUENCE", "TABLE", "INDEX", "VIEW",
-			"PROCEDURE", "FUNCTION", "TRIGGER", "PACKAGE" };
+			"MATERIALIZED_VIEW", "PROCEDURE", "FUNCTION", "TRIGGER", "PACKAGE" };
 	private final String lineSep = System.getProperty("line.separator");
 	private static final Map<String, String> sqlList = new HashMap<String, String>();
 	private String ddlFileEncoding = "Cp1251";
