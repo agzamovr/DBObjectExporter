@@ -167,12 +167,17 @@ public class GenerateDDL extends Task {
 		indexesSql = getSql("get_table_index");
 	}
 
-	private Set<String> getDependantProjectCodes() {
+	private Set<String> getDependantProjectCodes(Set<String> projectCodes,
+			String projectCode) {
 		String depProj = getProject().getProperty(projectCode + ".db.depends");
-		Set<String> projectCodes = new HashSet<String>();
+		if (projectCodes == null)
+			projectCodes = new HashSet<String>();
 		projectCodes.add(projectCode);
 		if (depProj != null && !depProj.isEmpty()) {
-			projectCodes.addAll(Arrays.asList(depProj.split(",")));
+			String[] projects = depProj.split(",");
+			for (String proj : projects)
+				if (!projectCodes.contains(proj))
+					getDependantProjectCodes(projectCodes, proj);
 		}
 		return projectCodes;
 	}
@@ -184,7 +189,7 @@ public class GenerateDDL extends Task {
 		File out = new File(outDir);
 		if (!out.isDirectory())
 			out.mkdir();
-		Set<String> projectCodes = getDependantProjectCodes();
+		Set<String> projectCodes = getDependantProjectCodes(null, projectCode);
 		for (String proj : projectCodes) {
 			out = new File(outDir + File.separator + proj);
 			if (!out.isDirectory())
@@ -233,7 +238,7 @@ public class GenerateDDL extends Task {
 			ClassNotFoundException, InterruptedException, ExecutionException {
 		String rootDefaultschema = getProject().getProperty(
 				projectCode + ".default.schema");
-		Set<String> projectCodes = getDependantProjectCodes();
+		Set<String> projectCodes = getDependantProjectCodes(null, projectCode);
 		Queue<Future<DBObj>> futures = new LinkedList<Future<DBObj>>();
 
 		File out = new File(outDir);
