@@ -13,7 +13,8 @@
 		        dbuser="apps"
 		        dbpassword="apps"
 		        outdir="dbobjects"
-		        action="downDB" />
+		        action="downDB"
+		        maxThreadCount="5" />
 	</target>
 
 	<target name="db.diff">

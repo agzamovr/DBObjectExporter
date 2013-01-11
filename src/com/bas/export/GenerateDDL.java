@@ -18,8 +18,17 @@ import java.sql.Types;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathExpression;
@@ -32,6 +41,9 @@ import org.xml.sax.InputSource;
 
 public class GenerateDDL extends Task {
 	private Connection conn;
+	private volatile static int threadCount = 0;
+	private ExecutorService executor;
+	private final BlockingQueue<DBObj> tasks = new LinkedBlockingQueue<DBObj>();;
 	private final String ddlSql;
 	private final String synonymsSql;
 	private final String aleterDdlSql;
@@ -48,6 +60,73 @@ public class GenerateDDL extends Task {
 	private String dbUser;
 	private String dbPassword;
 	private String action;
+	private int maxThreadCount = 5;
+
+	private class DBObj {
+		public final String type;
+		public final String schema;
+		public final String name;
+		public final String outDir;
+
+		public DBObj(String outDir, String type, String schema, String name) {
+			this.outDir = outDir;
+			this.type = type;
+			this.schema = schema;
+			this.name = name;
+		}
+	}
+
+	private class Exec implements Callable<DBObj> {
+
+		@Override
+		public DBObj call() throws Exception {
+			final int currentThreadIdx = ++threadCount;
+			DBObj dbObject = tasks.poll();
+			if (dbObject == null)
+				return null;
+			// System.out.println("Start genarating ddl for " +
+			// dbObject.type.toLowerCase() + " " + dbObject.name +
+			// ". Thread number: " + currentThreadIdx);
+			String ext = ".sql";
+			if ("PACKAGE".equalsIgnoreCase(dbObject.type))
+				ext = ".pck";
+			else if ("TRIGGER".equalsIgnoreCase(dbObject.type))
+				ext = ".trg";
+			else if ("FUNCTION".equalsIgnoreCase(dbObject.type))
+				ext = ".fnc";
+			else if ("PROCEDURE".equalsIgnoreCase(dbObject.type))
+				ext = ".prc";
+			File f = new File(dbObject.outDir + File.separator + dbObject.name
+					+ ext);
+			Writer sw = null;
+			try {
+				sw = new OutputStreamWriter(new FileOutputStream(f),
+						ddlFileEncoding);
+
+				genObjectDdl(getConn(), sw, dbObject.type, dbObject.name,
+						dbObject.schema);
+				if (!"SYNONYM".equals(dbObject.type)) {
+					Map<String, String> synonyms = getSynonyms(getConn(),
+							dbObject.name, dbObject.schema);
+					for (Map.Entry<String, String> entry : synonyms.entrySet()) {
+						genObjectDdl(getConn(), sw, "SYNONYM", entry.getKey(),
+								entry.getValue());
+					}
+				}
+				System.out.println(dbObject.name + " "
+						+ dbObject.type.toLowerCase()
+						+ " ddl generated. Thread number: " + currentThreadIdx);
+			} finally {
+				try {
+					sw.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+			return dbObject;
+		}
+
+	};
 
 	@Override
 	public void execute() throws BuildException {
@@ -130,14 +209,18 @@ public class GenerateDDL extends Task {
 	}
 
 	private void genProjectDdl() throws SQLException, IOException,
-			ClassNotFoundException {
+			ClassNotFoundException, InterruptedException, ExecutionException {
 		String rootDefaultschema = getProject().getProperty(
 				projectCode + ".default.schema");
 		Set<String> projectCodes = getDependantProjectCodes();
+		Queue<Future<DBObj>> futures = new LinkedList<Future<DBObj>>();
+
 		File out = new File(outDir);
 		if (!out.isDirectory())
 			out.mkdir();
-
+		if (maxThreadCount < 1)
+			maxThreadCount = 1;
+		executor = Executors.newFixedThreadPool(maxThreadCount);
 		try {
 			for (String proj : projectCodes) {
 				for (String obj : dbObjects) {
@@ -160,37 +243,14 @@ public class GenerateDDL extends Task {
 					Set<String> names = new HashSet<String>(Arrays.asList(nList
 							.split(",")));
 					for (String name : names) {
-						String ext = ".sql";
-						if ("PACKAGE".equalsIgnoreCase(obj))
-							ext = ".pck";
-						else if ("TRIGGER".equalsIgnoreCase(obj))
-							ext = ".trg";
-						else if ("FUNCTION".equalsIgnoreCase(obj))
-							ext = ".fnc";
-						else if ("PROCEDURE".equalsIgnoreCase(obj))
-							ext = ".prc";
-						File f = new File(out.getPath() + File.separator + name
-								+ ext);
-						Writer sw = new OutputStreamWriter(
-								new FileOutputStream(f), ddlFileEncoding);
-						try {
-							genObjectDdl(getConn(), sw, obj, name, schema);
-							if (!"SYNONYM".equals(obj)) {
-								Map<String, String> synonyms = getSynonyms(
-										getConn(), name, schema);
-								for (Map.Entry<String, String> entry : synonyms
-										.entrySet()) {
-									genObjectDdl(getConn(), sw, "SYNONYM",
-											entry.getKey(), entry.getValue());
-								}
-							}
-						} finally {
-							sw.close();
-						}
-						System.out.println(name + " " + obj + " ddl generated");
+						DBObj db = new DBObj(out.getPath(), obj, schema, name);
+						tasks.put(db);
+						futures.add(executor.submit(new Exec()));
 					}
 				}
 			}
+			while (!futures.isEmpty())
+				futures.poll().get();
 		} finally {
 			if (getConn() != null)
 				getConn().close();
@@ -385,5 +445,13 @@ public class GenerateDDL extends Task {
 		Class.forName("oracle.jdbc.driver.OracleDriver");
 		conn = DriverManager.getConnection(jdbcURL, dbUser, dbPassword);
 		return conn;
+	}
+
+	public int getMaxThreadCount() {
+		return maxThreadCount;
+	}
+
+	public void setMaxThreadCount(int maxThreadCount) {
+		this.maxThreadCount = maxThreadCount;
 	}
 }
