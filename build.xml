@@ -14,7 +14,7 @@
 		        dbpassword="apps"
 		        outdir="dbobjects"
 		        action="downDB"
-		        maxThreadCount="5" />
+		        maxThreadCount="15" />
 	</target>
 
 	<target name="db.diff">

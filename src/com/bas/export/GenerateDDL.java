@@ -77,6 +77,16 @@ public class GenerateDDL extends Task {
 	}
 
 	private class Exec implements Callable<DBObj> {
+		private final Connection conn;
+
+		public Exec() throws ClassNotFoundException, SQLException {
+			conn = DriverManager.getConnection(jdbcURL, dbUser, dbPassword);
+			conn.setAutoCommit(false);
+		}
+
+		public Connection getConn() {
+			return conn;
+		}
 
 		@Override
 		public DBObj call() throws Exception {
@@ -119,6 +129,7 @@ public class GenerateDDL extends Task {
 			} finally {
 				try {
 					sw.close();
+					getConn().close();
 				} catch (IOException e) {
 					e.printStackTrace();
 				}
@@ -131,6 +142,7 @@ public class GenerateDDL extends Task {
 	@Override
 	public void execute() throws BuildException {
 		try {
+			Class.forName("oracle.jdbc.driver.OracleDriver");
 			if ("downDB".equalsIgnoreCase(action))
 				genProjectDdl();
 			else if ("db.diff".equalsIgnoreCase(action))
@@ -221,40 +233,36 @@ public class GenerateDDL extends Task {
 		if (maxThreadCount < 1)
 			maxThreadCount = 1;
 		executor = Executors.newFixedThreadPool(maxThreadCount);
-		try {
-			for (String proj : projectCodes) {
-				for (String obj : dbObjects) {
-					String defaultschema = getProject().getProperty(
-							proj + ".default.schema");
-					if (defaultschema == null || defaultschema.isEmpty())
-						defaultschema = rootDefaultschema;
-					String schema = getProject().getProperty(
-							proj + "." + obj.toLowerCase() + ".schema");
-					if (schema == null)
-						schema = defaultschema;
-					if (schema == null)
-						continue;
-					String nList = getProject().getProperty(
-							proj + "." + obj.toLowerCase() + ".name");
-					if (nList == null)
-						continue;
-					nList = nList.toUpperCase();
-					schema = schema.toUpperCase();
-					Set<String> names = new HashSet<String>(Arrays.asList(nList
-							.split(",")));
-					for (String name : names) {
-						DBObj db = new DBObj(out.getPath(), obj, schema, name);
-						tasks.put(db);
-						futures.add(executor.submit(new Exec()));
-					}
+		for (String proj : projectCodes) {
+			for (String obj : dbObjects) {
+				String defaultschema = getProject().getProperty(
+						proj + ".default.schema");
+				if (defaultschema == null || defaultschema.isEmpty())
+					defaultschema = rootDefaultschema;
+				String schema = getProject().getProperty(
+						proj + "." + obj.toLowerCase() + ".schema");
+				if (schema == null)
+					schema = defaultschema;
+				if (schema == null)
+					continue;
+				String nList = getProject().getProperty(
+						proj + "." + obj.toLowerCase() + ".name");
+				if (nList == null)
+					continue;
+				nList = nList.toUpperCase();
+				schema = schema.toUpperCase();
+				Set<String> names = new HashSet<String>(Arrays.asList(nList
+						.split(",")));
+				for (String name : names) {
+					DBObj db = new DBObj(out.getPath(), obj, schema, name);
+					tasks.put(db);
+					futures.add(executor.submit(new Exec()));
 				}
 			}
-			while (!futures.isEmpty())
-				futures.poll().get();
-		} finally {
-			if (getConn() != null)
-				getConn().close();
 		}
+		while (!futures.isEmpty())
+			futures.poll().get();
+
 	}
 
 	private void genObjectDdl(Connection dbConnection, Writer w,
@@ -445,7 +453,6 @@ public class GenerateDDL extends Task {
 	public Connection getConn() throws SQLException, ClassNotFoundException {
 		if (conn != null && !conn.isClosed())
 			return conn;
-		Class.forName("oracle.jdbc.driver.OracleDriver");
 		conn = DriverManager.getConnection(jdbcURL, dbUser, dbPassword);
 		return conn;
 	}
