@@ -273,10 +273,13 @@ public class GenerateDDL extends Task {
 			call.setString(4, schema);
 			call.execute();
 			Clob res = call.getClob(1);
-			String buff = null;
 			BufferedReader br = new BufferedReader(res.getCharacterStream());
+			String buff = null;
 
-			while ((buff = br.readLine()) != null) {
+			while ((buff = br.readLine().trim()).isEmpty()) {
+			}
+
+			do {
 				if (buff.trim().startsWith("ALTER")) {
 					w.append(lineSep);
 					w.write("/");
@@ -284,7 +287,7 @@ public class GenerateDDL extends Task {
 				}
 				w.write(buff);
 				w.append(lineSep);
-			}
+			} while ((buff = br.readLine()) != null);
 			w.append('/');
 			w.append(lineSep);
 			w.flush();
