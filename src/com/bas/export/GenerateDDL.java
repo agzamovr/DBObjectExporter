@@ -44,7 +44,7 @@ public class GenerateDDL extends Task {
 	private Connection conn;
 	private volatile static int threadCount = 0;
 	private ExecutorService executor;
-	private final BlockingQueue<DBObj> tasks = new LinkedBlockingQueue<DBObj>();;
+	private final BlockingQueue<DBObj> tasks = new LinkedBlockingQueue<DBObj>();
 	private final String ddlSql;
 	private final String synonymsSql;
 	private final String indexesSql;
@@ -100,7 +100,61 @@ public class GenerateDDL extends Task {
 		}
 	}
 
-	private class Exec implements Callable<DBObj> {
+	private class ExecGenDiffDDL implements Callable<DBObj> {
+		private Connection conn;
+
+		private Connection getConn() throws SQLException {
+			if (conn != null && !conn.isClosed())
+				return conn;
+			conn = DriverManager.getConnection(jdbcURL, dbUser, dbPassword);
+			conn.setAutoCommit(false);
+			return conn;
+		}
+
+		@Override
+		public DBObj call() throws Exception {
+			final int currentThreadIdx = ++threadCount;
+			DBObj dbObject = tasks.poll();
+			if (dbObject == null
+					|| !objectExists(
+							getConn(),
+							dbObject.name,
+							dbObject.schema,
+							false || !objectExists(getConn(), dbObject.name,
+									dbObject.schema, true)))
+				return null;
+			Writer sw = null;
+			try {
+				File f = new File(dbObject.outDir + File.separator
+						+ dbObject.name + ".alter.sql");
+				sw = new OutputStreamWriter(new FileOutputStream(f),
+						ddlFileEncoding);
+				boolean hasAlter = false;
+				try {
+					hasAlter = genDiffDdl(getConn(), sw, "TABLE",
+							dbObject.name, dbObject.schema);
+				} finally {
+					sw.close();
+				}
+				if (!hasAlter)
+					f.delete();
+				System.out.println(dbObject.name + " "
+						+ dbObject.type.toLowerCase()
+						+ " ddl generated. Thread number: " + currentThreadIdx);
+			} finally {
+				try {
+					sw.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				getConn().close();
+			}
+			return dbObject;
+		}
+
+	};
+
+	private class ExecGenDDL implements Callable<DBObj> {
 		private Connection conn;
 
 		private Connection getConn() throws SQLException {
@@ -197,12 +251,16 @@ public class GenerateDDL extends Task {
 	}
 
 	private void genDbDiff() throws IOException, SQLException,
-			ClassNotFoundException {
+			ClassNotFoundException, InterruptedException, ExecutionException {
 		String rootDefaultschema = getProject().getProperty(
 				projectCode + ".default.schema");
 		File out = new File(outDir);
 		if (!out.isDirectory())
 			out.mkdir();
+		if (maxThreadCount < 1)
+			maxThreadCount = 1;
+		executor = Executors.newFixedThreadPool(maxThreadCount);
+		Queue<Future<DBObj>> futures = new LinkedList<Future<DBObj>>();
 		Set<String> projectCodes = getDependantProjectCodes(null, projectCode);
 		for (String proj : projectCodes) {
 			out = new File(outDir + File.separator + proj);
@@ -212,7 +270,6 @@ public class GenerateDDL extends Task {
 					proj + ".default.schema");
 			if (defaultschema == null || defaultschema.isEmpty())
 				defaultschema = rootDefaultschema;
-
 			String schema = getProject().getProperty(proj + ".table.schema");
 			if (schema == null)
 				schema = defaultschema;
@@ -227,28 +284,17 @@ public class GenerateDDL extends Task {
 					.split(",")));
 			try {
 				for (String name : names) {
-					if (!objectExists(getConn(), name, schema, false)
-							|| !objectExists(getConn(), name, schema, true))
-						continue;
-					File f = new File(out.getPath() + File.separator + name
-							+ ".alter.sql");
-					Writer sw = new OutputStreamWriter(new FileOutputStream(f),
-							ddlFileEncoding);
-					boolean hasAlter = false;
-					try {
-						hasAlter = genDiffDdl(getConn(), sw, "TABLE", name,
-								schema);
-					} finally {
-						sw.close();
-					}
-					if (!hasAlter)
-						f.delete();
+					DBObj db = new DBObj(out.getPath(), "TABLE", schema, name);
+					tasks.put(db);
+					futures.add(executor.submit(new ExecGenDiffDDL()));
 				}
 			} finally {
 				if (getConn() != null)
 					getConn().close();
 			}
 		}
+		while (!futures.isEmpty())
+			futures.poll().get();
 	}
 
 	private void genProjectDdl() throws SQLException, IOException,
@@ -287,7 +333,7 @@ public class GenerateDDL extends Task {
 				for (String name : names) {
 					DBObj db = new DBObj(out.getPath(), obj, schema, name);
 					tasks.put(db);
-					futures.add(executor.submit(new Exec()));
+					futures.add(executor.submit(new ExecGenDDL()));
 				}
 			}
 		}

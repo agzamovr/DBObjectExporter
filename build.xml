@@ -7,8 +7,12 @@
 	<taskdef name="ddlGen"
 	         classname="com.bas.export.GenerateDDL"
 	         classpath="ddl.jar;lib/ojdbc14.jar;lib/orai18n.jar;lib/ojdbc14dms.jar" />
-	<target name="downDB">
-		<ddlGen projectcode="sk001"
+	
+	<target name="ask.project.name" unless="project.name">
+			<input addproperty="project.name" defaultvalue="sk001" message="enter project:>" />
+		</target>
+	<target name="downDB" depends="ask.project.name">
+		<ddlGen projectcode="${project.name}"
 		        jdbcurl="jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=192.168.4.52)(PORT=1522))(CONNECT_DATA=(SERVICE_NAME=DEV)))"
 		        dbuser="apps"
 		        dbpassword="apps"
@@ -17,8 +21,8 @@
 		        maxThreadCount="15" />
 	</target>
 
-	<target name="db.diff">
-		<ddlGen projectcode="sk001"
+	<target name="db.diff" depends="ask.project.name">
+		<ddlGen projectcode="${project.name}"
 		        jdbcurl="jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=192.168.4.52)(PORT=1522))(CONNECT_DATA=(SERVICE_NAME=DEV)))"
 		        dbuser="apps"
 		        dbpassword="apps"
