@@ -16,6 +16,13 @@ Select Owner, Index_Name
    And Table_Owner = ?
    And Table_Name = ?]]>
 	</get_table_index>
+	<object_exists>
+	<![CDATA[
+Select 1
+  From All_Objects{0}
+ Where Owner = ?
+   And Object_Name = ?]]>
+	</object_exists>
 	<get_ddl>
 		<![CDATA[
 	Begin

@@ -15,6 +15,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -48,6 +49,7 @@ public class GenerateDDL extends Task {
 	private final String synonymsSql;
 	private final String indexesSql;
 	private final String aleterDdlSql;
+	private final MessageFormat objectExistsSql;
 	private final String[] dbObjects = { "SEQUENCE", "TABLE", "VIEW",
 			"MATERIALIZED_VIEW", "PROCEDURE", "FUNCTION", "TRIGGER", "PACKAGE" };
 	private final String lineSep = System.getProperty("line.separator");
@@ -63,10 +65,21 @@ public class GenerateDDL extends Task {
 	private String action;
 	private int maxThreadCount = 5;
 
+	public static void main(String[] args) throws IOException, SQLException,
+			ClassNotFoundException {
+		GenerateDDL gen = new GenerateDDL();
+		gen.dbLink = "TEST.SAMRUK.KZ";
+		gen.dbPassword = "apps";
+		gen.dbUser = "apps";
+		gen.jdbcURL = "jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcp)(HOST=192.168.4.52)(PORT=1522))(CONNECT_DATA=(SERVICE_NAME=DEV)))";
+		gen.objectExists(gen.getConn(), "", "XXSK", true);
+	}
+
 	private class DBObj {
 		public final String type;
 		public final String schema;
 		public final String name;
+		public final String ext;
 		public final String outDir;
 
 		public DBObj(String outDir, String type, String schema, String name) {
@@ -74,6 +87,16 @@ public class GenerateDDL extends Task {
 			this.type = type;
 			this.schema = schema;
 			this.name = name;
+			if ("PACKAGE".equalsIgnoreCase(type))
+				ext = ".pck";
+			else if ("TRIGGER".equalsIgnoreCase(type))
+				ext = ".trg";
+			else if ("FUNCTION".equalsIgnoreCase(type))
+				ext = ".fnc";
+			else if ("PROCEDURE".equalsIgnoreCase(type))
+				ext = ".prc";
+			else
+				this.ext = ".sql";
 		}
 	}
 
@@ -92,22 +115,12 @@ public class GenerateDDL extends Task {
 		public DBObj call() throws Exception {
 			final int currentThreadIdx = ++threadCount;
 			DBObj dbObject = tasks.poll();
-			if (dbObject == null)
+			if (dbObject == null
+					|| !objectExists(getConn(), dbObject.name, dbObject.schema,
+							false))
 				return null;
-			// System.out.println("Start genarating ddl for " +
-			// dbObject.type.toLowerCase() + " " + dbObject.name +
-			// ". Thread number: " + currentThreadIdx);
-			String ext = ".sql";
-			if ("PACKAGE".equalsIgnoreCase(dbObject.type))
-				ext = ".pck";
-			else if ("TRIGGER".equalsIgnoreCase(dbObject.type))
-				ext = ".trg";
-			else if ("FUNCTION".equalsIgnoreCase(dbObject.type))
-				ext = ".fnc";
-			else if ("PROCEDURE".equalsIgnoreCase(dbObject.type))
-				ext = ".prc";
 			File f = new File(dbObject.outDir + File.separator + dbObject.name
-					+ ext);
+					+ dbObject.ext);
 			Writer sw = null;
 			try {
 				sw = new OutputStreamWriter(new FileOutputStream(f),
@@ -165,6 +178,7 @@ public class GenerateDDL extends Task {
 		aleterDdlSql = getSql("alter_ddl");
 		synonymsSql = getSql("get_synonym");
 		indexesSql = getSql("get_table_index");
+		objectExistsSql = new MessageFormat(getSql("object_exists"));
 	}
 
 	private Set<String> getDependantProjectCodes(Set<String> projectCodes,
@@ -213,6 +227,9 @@ public class GenerateDDL extends Task {
 					.split(",")));
 			try {
 				for (String name : names) {
+					if (!objectExists(getConn(), name, schema, false)
+							|| !objectExists(getConn(), name, schema, true))
+						continue;
 					File f = new File(out.getPath() + File.separator + name
 							+ ".alter.sql");
 					Writer sw = new OutputStreamWriter(new FileOutputStream(f),
@@ -379,6 +396,29 @@ public class GenerateDDL extends Task {
 				res.put(rs.getString(2), rs.getString(1));
 			}
 			rs.close();
+		} finally {
+			ps.close();
+		}
+		return res;
+	}
+
+	private boolean objectExists(Connection dbConnection, String objectName,
+			String schema, boolean forDblink) throws SQLException {
+		boolean res = false;
+		String sql;
+		Object[] param;
+		if (forDblink)
+			param = new Object[] { "@\"" + dbLink + "\"" };
+		else
+			param = new Object[] { "" };
+
+		sql = objectExistsSql.format(param);
+		PreparedStatement ps = dbConnection.prepareStatement(sql);
+		try {
+			ps.setString(1, schema);
+			ps.setString(2, objectName);
+			ResultSet rs = ps.executeQuery();
+			res = rs.next();
 		} finally {
 			ps.close();
 		}
